@@ -1,4 +1,4 @@
-add_executable(vktest vktest.cpp)
+add_executable(vktest vktest.cpp gen_mesh.cpp)
 target_link_libraries(vktest PRIVATE glfw glm Vulkan::Vulkan)
 target_compile_definitions(vktest PRIVATE SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/shaders")
 
