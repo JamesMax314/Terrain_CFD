@@ -249,7 +249,7 @@ private:
     }
 
     void processMouseMovement(float dx, float dy) {
-        const float sensitivity = 0.1f; // Adjust this value to control the sensitivity
+        const float sensitivity = 0.1f;
         dx *= sensitivity;
         dy *= sensitivity;
     
@@ -268,10 +268,6 @@ private:
         glm::vec3 cameraFrontNoUp = glm::vec3(cameraFront[0], 0.0f, cameraFront[2]); // Allows motion only in the plain 
         cameraPosition += offset[0]*glm::cross(cameraFrontNoUp, worldUp) + offset[1]*worldUp + offset[2]*cameraFrontNoUp;
 
-        // cameraTarget = camPos + cameraFront; // Look just infront of camera
-        // viewMatrix = glm::lookAt(camPos, cameraTarget, cameraUp);
-        
-        // cameraPosition += offset;
         updateUniformBuffer(currentFrame);
     }
 
