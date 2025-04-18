@@ -19,6 +19,8 @@ void runCompute(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue,
     std::vector<float> input(N);
     for (int i = 0; i < N; ++i) input[i] = float(i);
 
+
+    // Create buffers and allocate memory
     VkBuffer inBuffer, outBuffer;
     VkDeviceMemory inMemory, outMemory;
     VkDeviceSize bufferSize = sizeof(float) * N;
@@ -31,31 +33,36 @@ void runCompute(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue,
                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  physicalDevice, outBuffer, outMemory);
 
+    // Map memory and copy data
     void* data;
     vkMapMemory(device, inMemory, 0, bufferSize, 0, &data);
     memcpy(data, input.data(), bufferSize);
     vkUnmapMemory(device, inMemory);
 
+    // Complie shader
     VkShaderModule shaderModule = createShaderModule(device, readFile(std::string(SHADER_DIR) + "/example.spv"));
 
+    // Descripto set bindings
     VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT};
     bindings[1] = {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT};
 
+    // Descriptor Set Layout
     VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     layoutInfo.bindingCount = 2;
     layoutInfo.pBindings = bindings;
-
     VkDescriptorSetLayout descriptorSetLayout;
     vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout);
 
+    // Pipeline Layout
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-
     VkPipelineLayout pipelineLayout;
     vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
 
+    // Create compute pipeline
+    // Shader stage
     VkPipelineShaderStageCreateInfo stageInfo{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
     stageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
     stageInfo.module = shaderModule;
@@ -64,34 +71,30 @@ void runCompute(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue,
     VkComputePipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     pipelineInfo.stage = stageInfo;
     pipelineInfo.layout = pipelineLayout;
-
     VkPipeline pipeline;
     vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
 
+    // Create descriptor pool
     VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2};
     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
     poolInfo.maxSets = 1;
-
     VkDescriptorPool descriptorPool;
     vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool);
 
+    // Allocate descriptor set
     VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &descriptorSetLayout;
-
     VkDescriptorSet descriptorSet;
     vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
-
     VkDescriptorBufferInfo inInfo{inBuffer, 0, bufferSize};
     VkDescriptorBufferInfo outInfo{outBuffer, 0, bufferSize};
-
     VkWriteDescriptorSet writes[2]{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptorSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &inInfo};
     writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptorSet, 1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &outInfo};
-
     vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
 
     // Record command buffer
@@ -99,19 +102,18 @@ void runCompute(VkDevice device, VkPhysicalDevice physicalDevice, VkQueue queue,
     cmdAllocInfo.commandPool = commandPool;
     cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdAllocInfo.commandBufferCount = 1;
-
     VkCommandBuffer cmdBuf;
     vkAllocateCommandBuffers(device, &cmdAllocInfo, &cmdBuf);
 
+    // Begin command buffer
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     vkBeginCommandBuffer(cmdBuf, &beginInfo);
-
     vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
     vkCmdDispatch(cmdBuf, N, 1, 1);
-
     vkEndCommandBuffer(cmdBuf);
 
+    // Submit command buffer
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &cmdBuf;
@@ -146,5 +148,29 @@ int main() {
     createLogicalDevice(vk);
     createCommandPool(vk);
 
-    runCompute(vk.device, vk.physicalDevice, vk.graphicsQueue, vk.commandPool);
+    // runCompute(vk.device, vk.physicalDevice, vk.graphicsQueue, vk.commandPool);
+
+    const int N = 10;
+    std::vector<float> input(N);
+    std::vector<float> output(N);
+    for (int i = 0; i < N; ++i) input[i] = float(i);
+
+    // Create buffers and allocate memory
+    VkDeviceSize bufferSize = sizeof(float) * N;
+
+    buffer inBuffer = createComputeBuffer(vk, bufferSize);
+    buffer outBuffer = createComputeBuffer(vk, bufferSize);
+    std::vector<buffer> buffers = {inBuffer, outBuffer};
+
+    copyToBuffer(vk, inBuffer, input.data());
+
+    VkShaderModule shaderModule = createShaderModule(vk, readFile(std::string(SHADER_DIR) + "/example.spv"));
+
+    kernel kern = buildKernal(vk, shaderModule, buffers, N);
+
+    executeKernel(vk, kern);
+
+    copyFromBuffer(vk, outBuffer, output.data());
+    for (int i = 0; i < N; ++i)
+        std::cout << input[i] << " * 2 = " << output[i] << "\n";
 }
