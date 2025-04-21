@@ -26,6 +26,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+FetchContent_Declare(
+    fetch_vk_bootstrap
+    GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap
+    GIT_TAG        v1.4.312 #suggest using a tag so the library doesn't update whenever new commits are pushed to a branch
+)
+FetchContent_MakeAvailable(fetch_vk_bootstrap)
+
 find_package(Vulkan REQUIRED)
 
 # Add Vulkan library path to RPATH
@@ -44,7 +51,7 @@ endif()
 set(CMAKE_CURRENT_SOURCE_DIR src)
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 add_executable(thermal_cfd ${SRC_FILES})
-target_link_libraries(thermal_cfd PRIVATE glfw glm Vulkan::Vulkan)
+target_link_libraries(thermal_cfd PRIVATE glfw glm Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
 target_compile_definitions(thermal_cfd PRIVATE SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/shaders")
 
 # Set the directory for shaders

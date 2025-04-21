@@ -1,4 +1,48 @@
-#include "vkHelper.hpp"
+#include <stdio.h>
+
+#include <memory>
+#include <iostream>
+#include <fstream>
+#include <string>
+
+#include <vulkan/vulkan_core.h>
+#include <GLFW/glfw3.h>
+
+#include <VkBootstrap.h>
+
+const int MAX_FRAMES_IN_FLIGHT = 2;
+
+struct Init {
+    GLFWwindow* window;
+    vkb::Instance instance;
+    vkb::InstanceDispatchTable inst_disp;
+    VkSurfaceKHR surface;
+    vkb::Device device;
+    vkb::DispatchTable disp;
+    vkb::Swapchain swapchain;
+};
+
+struct RenderData {
+    VkQueue graphics_queue;
+    VkQueue present_queue;
+
+    std::vector<VkImage> swapchain_images;
+    std::vector<VkImageView> swapchain_image_views;
+    std::vector<VkFramebuffer> framebuffers;
+
+    VkRenderPass render_pass;
+    VkPipelineLayout pipeline_layout;
+    VkPipeline graphics_pipeline;
+
+    VkCommandPool command_pool;
+    std::vector<VkCommandBuffer> command_buffers;
+
+    std::vector<VkSemaphore> available_semaphores;
+    std::vector<VkSemaphore> finished_semaphore;
+    std::vector<VkFence> in_flight_fences;
+    std::vector<VkFence> image_in_flight;
+    size_t current_frame = 0;
+};
 
 GLFWwindow* create_window_glfw(const char* window_name = "", bool resize = true) {
     glfwInit();
@@ -203,7 +247,7 @@ int create_graphics_pipeline(Init& init, RenderData& data) {
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly = {};
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     input_assembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport = {};
@@ -363,7 +407,7 @@ int create_command_buffers(Init& init, RenderData& data) {
         render_pass_info.framebuffer = data.framebuffers[i];
         render_pass_info.renderArea.offset = { 0, 0 };
         render_pass_info.renderArea.extent = init.swapchain.extent;
-        VkClearValue clearColor{ { {202.0f/255.0f, 226.0f/255.0f, 232.0f/255.0f, 1.0f} } };
+        VkClearValue clearColor{ { { 0.0f, 0.0f, 0.0f, 1.0f } } };
         render_pass_info.clearValueCount = 1;
         render_pass_info.pClearValues = &clearColor;
 
@@ -386,7 +430,7 @@ int create_command_buffers(Init& init, RenderData& data) {
 
         init.disp.cmdBindPipeline(data.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, data.graphics_pipeline);
 
-        init.disp.cmdDraw(data.command_buffers[i], 4, 1, 0, 0);
+        init.disp.cmdDraw(data.command_buffers[i], 3, 1, 0, 0);
 
         init.disp.cmdEndRenderPass(data.command_buffers[i]);
 
@@ -530,4 +574,32 @@ void cleanup(Init& init, RenderData& data) {
     vkb::destroy_surface(init.instance, init.surface);
     vkb::destroy_instance(init.instance);
     destroy_window_glfw(init.window);
+}
+
+int main() {
+    Init init;
+    RenderData render_data;
+
+    if (0 != device_initialization(init)) return -1;
+    if (0 != create_swapchain(init)) return -1;
+    if (0 != get_queues(init, render_data)) return -1;
+    if (0 != create_render_pass(init, render_data)) return -1;
+    if (0 != create_graphics_pipeline(init, render_data)) return -1;
+    if (0 != create_framebuffers(init, render_data)) return -1;
+    if (0 != create_command_pool(init, render_data)) return -1;
+    if (0 != create_command_buffers(init, render_data)) return -1;
+    if (0 != create_sync_objects(init, render_data)) return -1;
+
+    while (!glfwWindowShouldClose(init.window)) {
+        glfwPollEvents();
+        int res = draw_frame(init, render_data);
+        if (res != 0) {
+            std::cout << "failed to draw frame \n";
+            return -1;
+        }
+    }
+    init.disp.deviceWaitIdle();
+
+    cleanup(init, render_data);
+    return 0;
 }
