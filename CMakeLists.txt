@@ -33,9 +33,12 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 set(CMAKE_INSTALL_RPATH "${Vulkan_LIBRARY_DIRS}")
 
+
+# Add tests
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 		add_subdirectory(tests)
 endif()
+
 
 # Add main executable
 set(CMAKE_CURRENT_SOURCE_DIR src)

@@ -1,0 +1,98 @@
+#version 450
+
+layout (local_size_x = 32) in;
+
+const int gridSize = 10;
+const float dt = 0.1;
+const int dim = 3;
+
+layout(binding = 0) buffer velocityBuff { float velocity[]; };
+layout(binding = 1) buffer densityBuff { float density[]; };
+layout(binding = 2) buffer pressureBuff { float pressure[]; };
+
+layout(binding = 3) buffer velocity2Buff { float velocity2[]; };
+layout(binding = 4) buffer density2Buff { float density2[]; };
+layout(binding = 5) buffer pressure2Buff { float pressure2[]; };
+
+int get_grid_index(ivec3 pos) {
+    return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
+}
+
+vec3 read_velocity(uint gridIndex) {
+    vec3 vel;
+    vel.x = velocity[gridIndex*dim];
+    vel.y = velocity[gridIndex*dim + 1];
+    vel.z = velocity[gridIndex*dim + 2];
+    return vel;
+}
+
+void set_new_velocity(uint gridIndex, vec3 vel) {
+    velocity2[gridIndex*dim] = vel.x;
+    velocity2[gridIndex*dim + 1] = vel.y;
+    velocity2[gridIndex*dim + 2] = vel.z;
+}
+
+#define DEFINE_TRILINEAR_INTERPOLATION(NAME, ARRAY)                        \
+float trilinearInterpolation_##NAME(vec3 pos) {                            \
+    ivec3 p0 = ivec3(floor(pos));                                          \
+    ivec3 p1 = p0 + ivec3(1);                                            \
+    vec3 f = fract(pos);                                                   \
+    float v000 = ARRAY[get_grid_index(p0)];                                \
+    float v100 = ARRAY[get_grid_index(ivec3(p1.x, p0.y, p0.z))];           \
+    float v010 = ARRAY[get_grid_index(ivec3(p0.x, p1.y, p0.z))];           \
+    float v110 = ARRAY[get_grid_index(ivec3(p1.x, p1.y, p0.z))];           \
+    float v001 = ARRAY[get_grid_index(ivec3(p0.x, p0.y, p1.z))];           \
+    float v101 = ARRAY[get_grid_index(ivec3(p1.x, p0.y, p1.z))];           \
+    float v011 = ARRAY[get_grid_index(ivec3(p0.x, p1.y, p1.z))];           \
+    float v111 = ARRAY[get_grid_index(p1)];                                \
+    float v00 = mix(v000, v100, f.x);                                      \
+    float v10 = mix(v010, v110, f.x);                                      \
+    float v01 = mix(v001, v101, f.x);                                      \
+    float v11 = mix(v011, v111, f.x);                                      \
+    float v0 = mix(v00, v10, f.y);                                         \
+    float v1 = mix(v01, v11, f.y);                                         \
+    return mix(v0, v1, f.z);                                               \
+}
+DEFINE_TRILINEAR_INTERPOLATION(density, density)
+DEFINE_TRILINEAR_INTERPOLATION(pressure, pressure)
+
+vec3 trilinearInterpolation_velocity(vec3 pos) {
+    ivec3 p0 = ivec3(floor(pos));
+    ivec3 p1 = p0 + ivec3(1);
+    vec3 f = fract(pos);
+    vec3 v000 = read_velocity(get_grid_index(p0));
+    vec3 v100 = read_velocity(get_grid_index(ivec3(p1.x, p0.y, p0.z)));
+    vec3 v010 = read_velocity(get_grid_index(ivec3(p0.x, p1.y, p0.z)));
+    vec3 v110 = read_velocity(get_grid_index(ivec3(p1.x, p1.y, p0.z)));
+    vec3 v001 = read_velocity(get_grid_index(ivec3(p0.x, p0.y, p1.z)));
+    vec3 v101 = read_velocity(get_grid_index(ivec3(p1.x, p0.y, p1.z)));
+    vec3 v011 = read_velocity(get_grid_index(ivec3(p0.x, p1.y, p1.z)));
+    vec3 v111 = read_velocity(get_grid_index(p1));
+    vec3 v00 = mix(v000, v100, f.x);
+    vec3 v10 = mix(v010, v110, f.x);
+    vec3 v01 = mix(v001, v101, f.x);
+    vec3 v11 = mix(v011, v111, f.x);
+    vec3 v0 = mix(v00, v10, f.y);
+    vec3 v1 = mix(v01, v11, f.y);
+    return mix(v0, v1, f.z);
+}
+
+vec3 get_grid_position(uint index) {
+    uint x = index % gridSize;
+    uint y = (index / gridSize) % gridSize;
+    uint z = index / (gridSize * gridSize);
+    return vec3(float(x), float(y), float(z));
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+
+    vec3 velocity = read_velocity(idx);
+    vec3 gridPos = get_grid_position(idx);
+    vec3 newPos = gridPos - velocity * dt;
+
+    vec3 newVel = trilinearInterpolation_velocity(newPos);
+    set_new_velocity(idx, newVel);
+    density2[idx] = trilinearInterpolation_density(newPos);
+    pressure2[idx] = trilinearInterpolation_pressure(newPos);
+}
