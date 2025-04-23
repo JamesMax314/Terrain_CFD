@@ -4,17 +4,17 @@
 
 layout (local_size_x = 32) in;
 
-const int gridSize = 3;
+const int gridSize = 2;
 const float dt = 0.1;
 const int dim = 3;
 
-layout(binding = 0) buffer velocityBuff { float velocity[]; };
-layout(binding = 1) buffer densityBuff { float density[]; };
-layout(binding = 2) buffer pressureBuff { float pressure[]; };
+layout(binding = 3) buffer velocityBuff { float velocity[]; };
+layout(binding = 4) buffer densityBuff { float density[]; };
+layout(binding = 5) buffer pressureBuff { float pressure[]; };
 
-layout(binding = 3) buffer velocity2Buff { float velocity2[]; };
-layout(binding = 4) buffer density2Buff { float density2[]; };
-layout(binding = 5) buffer pressure2Buff { float pressure2[]; };
+layout(binding = 0) buffer velocity2Buff { float velocity2[]; };
+layout(binding = 1) buffer density2Buff { float density2[]; };
+layout(binding = 2) buffer pressure2Buff { float pressure2[]; };
 
 int get_grid_index(ivec3 pos) {
     return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;

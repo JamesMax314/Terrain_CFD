@@ -70,7 +70,7 @@ int main() {
 
     // Later will need a different render pass to draw standard geometry
 
-    const int gridSize = 10;
+    const int gridSize = 3;
     const int bufferSize = gridSize * gridSize * gridSize * sizeof(float);
     buffer velocity = create_compute_buffer(init, bufferSize*3);
     buffer density = create_compute_buffer(init, bufferSize);
@@ -79,10 +79,11 @@ int main() {
     buffer density2 = create_compute_buffer(init, bufferSize);
     buffer pressure2 = create_compute_buffer(init, bufferSize);
     std::vector<buffer> buffers = {velocity, density, pressure, velocity2, density2, pressure2};
+    std::vector<buffer> buffers2 = {velocity2, density2, pressure2, velocity, density, pressure};
 
-    std::vector<float> velocities = init_velocities(gridSize, 0.0f, 1.0f, 0.0f);
+    std::vector<float> velocities = init_velocities(gridSize, 0.0f, -1.0f, 0.0f);
     std::vector<float> densities = init_density(gridSize, 0.0f);
-    densities[0] = 1.0f;
+    densities[gridSize * gridSize * gridSize-1] = 1.0f;
 
     copy_to_buffer(init, velocity, velocities.data());
     copy_to_buffer(init, density, densities.data());
@@ -90,11 +91,14 @@ int main() {
     print_vector(densities);
 
     VkShaderModule shaderModule = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/advect.spv"));
+    // VkShaderModule shaderModule2 = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/advect2.spv"));
     kernel kern = build_kernal(init, compute_handler, shaderModule, buffers, bufferSize);
+    kernel kern2 = build_kernal(init, compute_handler, shaderModule, buffers2, bufferSize);
+
     // execute_kernel(init, compute_handler, kern);
 
 
-
+    bool toggle = false;
     while (!glfwWindowShouldClose(init.window)) {
         glfwPollEvents();
         int res = draw_frame(init, render_data);
@@ -102,18 +106,26 @@ int main() {
             std::cout << "failed to draw frame \n";
             return -1;
         }
+        
+        if (toggle) {
+            execute_kernel(init, compute_handler, kern2);
+            copy_from_buffer(init, density, densities.data());
+        } else {
+            execute_kernel(init, compute_handler, kern);
+            copy_from_buffer(init, density2, densities.data());
+        }
+        toggle = !toggle;
 
-        execute_kernel(init, compute_handler, kern);
-        // copy_from_buffer(init, density2, densities.data());
         // copy_to_buffer(init, density, densities.data());
         // kern = build_kernal(init, compute_handler, shaderModule, buffers, bufferSize);
-        // print_vector(densities);
+        print_vector(densities);
     }
     init.disp.deviceWaitIdle();
 
     vkDestroyShaderModule(init.device.device, shaderModule, nullptr);
     cleanup(init, buffers);
     cleanup(init, kern);
+    cleanup(init, kern2);
     cleanup(init, compute_handler);
     cleanup(init, render_data);
 

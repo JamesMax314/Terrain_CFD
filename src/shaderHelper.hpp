@@ -35,8 +35,9 @@ void copy_to_buffer(Init& init, buffer& buf, void* data);
 void copy_from_buffer(Init& init, buffer& buf, void* data);
 
 kernel build_kernal(Init& init, ComputeHandler& handler, VkShaderModule& shaderModule, std::vector<buffer>& buffers, size_t nThreads);
+void updateDescriptorSetForPass(Init& init, std::vector<buffer>& buffers, VkDescriptorSet descriptorSet);
 
-void execute_kernel(Init& init, ComputeHandler handler, kernel& kern);
+void execute_kernel(Init& init, ComputeHandler& handler, kernel& kern);
 
 void cleanup(Init& init, std::vector<buffer>& buffers);
 void cleanup(Init& init, ComputeHandler& handler);

@@ -76,7 +76,7 @@ void copy_from_buffer(Init& init, buffer& buf, void* data) {
 kernel build_kernal(Init& init, ComputeHandler& handler, VkShaderModule& shaderModule, std::vector<buffer>& buffers, size_t nThreads) {
     kernel kern;
     
-    // Descripto set bindings
+    // Descriptor set bindings
     // VkDescriptorSetLayoutBinding bindings[buffers.size()]{};
     std::vector<VkDescriptorSetLayoutBinding> bindings(buffers.size());
 
@@ -160,7 +160,19 @@ kernel build_kernal(Init& init, ComputeHandler& handler, VkShaderModule& shaderM
     return kern;
 }
 
-void execute_kernel(Init& init, ComputeHandler handler, kernel& kern) {
+// Can be used to change the order of the buffers in the descriptor set
+void updateDescriptorSetForPass(Init& init, std::vector<buffer>& buffers, VkDescriptorSet descriptorSet) {
+    std::vector<VkWriteDescriptorSet> writes(buffers.size());
+    std::vector<VkDescriptorBufferInfo> infos(buffers.size());
+
+    for (size_t i=0; i<buffers.size(); ++i) {
+        infos[i] = {buffers[i].buffer, 0, buffers[i].size};
+        writes[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, descriptorSet, static_cast<uint32_t>(i), 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &infos[i]};
+    }
+    vkUpdateDescriptorSets(init.device.device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+}
+
+void execute_kernel(Init& init, ComputeHandler& handler, kernel& kern) {
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &kern.cmdBuf;
