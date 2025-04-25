@@ -181,6 +181,83 @@ void execute_kernel(Init& init, ComputeHandler& handler, kernel& kern) {
     vkQueueWaitIdle(handler.queue);
 }
 
+void createImage(Init& init, texture& tex) {
+    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    imageInfo.imageType = VK_IMAGE_TYPE_3D;
+    imageInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    imageInfo.extent = {tex.x, tex.y, tex.z}; // e.g. 16x16x16
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    vkCreateImage(init.device, &imageInfo, nullptr, &tex.image);
+}
+
+void createImageView(Init& init, texture& tex){
+    VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    viewInfo.image = tex.image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    viewInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    
+    vkCreateImageView(init.device, &viewInfo, nullptr, &tex.imageView);    
+}
+
+void createSampler(Init& init, texture& tex){
+    VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    
+    vkCreateSampler(init.device, &samplerInfo, nullptr, &tex.sampler);    
+}
+
+uint32_t findMemoryType(vkb::PhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) &&
+            (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+}    
+
+void createTextureMemory(Init& init, texture& tex) {
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(init.device, tex.image, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(init.device.physical_device, memRequirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkAllocateMemory(init.device, &allocInfo, nullptr, &tex.memory);
+
+    vkBindImageMemory(init.device, tex.image, tex.memory, 0);
+}
+
+void create3DTexture(Init& init, texture& tex) {
+    createImage(init, tex);
+    createTextureMemory(init, tex);
+    createImageView(init, tex);
+    createSampler(init, tex);
+}
+
 void cleanup(Init& init, std::vector<buffer>& buffers) {
     for (auto& buf : buffers) {
         vkDestroyBuffer(init.device.device, buf.buffer, nullptr);
@@ -198,4 +275,11 @@ void cleanup(Init& init, kernel& kern) {
     vkDestroyDescriptorPool(init.device.device, kern.descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(init.device.device, kern.descriptorSetLayout, nullptr);
     vkDestroyPipelineLayout(init.device.device, kern.pipelineLayout, nullptr);
+}
+
+void cleanup(Init& init, texture& tex) {
+    vkDestroyImageView(init.device.device, tex.imageView, nullptr);
+    vkDestroyImage(init.device.device, tex.image, nullptr);
+    vkFreeMemory(init.device.device, tex.memory, nullptr);
+    vkDestroySampler(init.device.device, tex.sampler, nullptr);
 }

@@ -26,6 +26,16 @@ struct kernel {
     VkPipelineLayout pipelineLayout;
 };
 
+struct texture {
+    uint32_t x;
+    uint32_t y;
+    uint32_t z;
+    VkImage image;
+    VkDeviceMemory memory;
+    VkImageView imageView;
+    VkSampler sampler;
+};
+
 int get_comp_queue(Init& init, ComputeHandler& handler);
 int create_command_pool(Init& init, ComputeHandler& handler);
 
@@ -39,6 +49,13 @@ void updateDescriptorSetForPass(Init& init, std::vector<buffer>& buffers, VkDesc
 
 void execute_kernel(Init& init, ComputeHandler& handler, kernel& kern);
 
+void createImage(Init& init, texture& texture);
+void createImageView(Init& init, texture& tex);
+void createSampler(Init& init, texture& tex);
+void createTextureMemory(Init& init, texture& tex);
+void create3DTexture(Init& init, texture& tex);
+
 void cleanup(Init& init, std::vector<buffer>& buffers);
 void cleanup(Init& init, ComputeHandler& handler);
 void cleanup(Init& init, kernel& kern);
+void cleanup(Init& init, texture& tex);

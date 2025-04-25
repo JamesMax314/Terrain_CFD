@@ -519,6 +519,9 @@ void cleanup(Init& init, RenderData& data) {
         init.disp.destroyFramebuffer(framebuffer, nullptr);
     }
 
+    vkDestroyDescriptorPool(init.device.device, data.descriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(init.device.device, data.descriptorSetLayout, nullptr);
+
     init.disp.destroyPipeline(data.graphics_pipeline, nullptr);
     init.disp.destroyPipelineLayout(data.pipeline_layout, nullptr);
     init.disp.destroyRenderPass(data.render_pass, nullptr);

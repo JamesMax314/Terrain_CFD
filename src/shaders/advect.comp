@@ -4,7 +4,7 @@
 
 layout (local_size_x = 32) in;
 
-const int gridSize = 3;
+const int gridSize = 128;
 const float dt = 0.1;
 const int dim = 3;
 
@@ -15,6 +15,9 @@ layout(binding = 2) buffer pressureBuff { float pressure[]; };
 layout(binding = 3) buffer velocity2Buff { float velocity2[]; };
 layout(binding = 4) buffer density2Buff { float density2[]; };
 layout(binding = 5) buffer pressure2Buff { float pressure2[]; };
+
+layout(binding = 6, rgba32f) writeonly uniform image3D outputTexture;
+
 
 int get_grid_index(ivec3 pos) {
     return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
@@ -104,9 +107,10 @@ void main() {
 
     vec3 newVel = trilinearInterpolation_velocity(newPos);
     set_new_velocity(idx, newVel);
-    density2[idx] = trilinearInterpolation_density(newPos);
+    float density = trilinearInterpolation_density(newPos);
+    density2[idx] = density;
     pressure2[idx] = trilinearInterpolation_pressure(newPos);
 
-    // density2[0] = 32;
-    // density2[0] = 32;
+    ivec3 coord = ivec3(get_grid_position(idx));
+    imageStore(outputTexture, coord, vec4(density));
 }

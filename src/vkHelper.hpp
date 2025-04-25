@@ -36,6 +36,10 @@ struct RenderData {
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
 
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+    VkDescriptorSetLayout descriptorSetLayout;
+
     VkCommandPool command_pool;
     std::vector<VkCommandBuffer> command_buffers;
 
