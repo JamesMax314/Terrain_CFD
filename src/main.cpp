@@ -12,6 +12,7 @@ const bool enableValidationLayers = true;
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
+const uint local_work_size = 32;
 
 // std::vector<Vertex> vertices = {
 //     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
@@ -34,12 +35,12 @@ std::vector<float> init_velocities(size_t gridsize, float vx, float vy, float vz
     return velocities;
 }
 
-std::vector<float> init_density(size_t gridsize, float base_val) {
-    std::vector<float> densities(gridsize * gridsize * gridsize);
-    for (size_t i = 0; i < densities.size(); i += 1) {
-        densities[i] = base_val;
+std::vector<float> init_scalars(size_t gridsize, float base_val) {
+    std::vector<float> scalars(gridsize * gridsize * gridsize);
+    for (size_t i = 0; i < scalars.size(); i += 1) {
+        scalars[i] = base_val;
     }
-    return densities;
+    return scalars;
 }
 
 void print_vector(const std::vector<float>& vec) {
@@ -468,6 +469,112 @@ int create_graphics_pipeline(Init& init, RenderData& data, std::vector<texture>&
     return 0;
 }
 
+
+kernel gaussSiedelKernel(Init& init, ComputeHandler& handler, VkShaderModule& shaderModule, std::vector<buffer>& buffers, size_t nThreads) {
+    kernel kern;
+    
+    // Descriptor set bindings
+    // VkDescriptorSetLayoutBinding bindings[buffers.size()]{};
+    std::vector<VkDescriptorSetLayoutBinding> bindings(buffers.size());
+
+    for (size_t i = 0; i < buffers.size(); ++i) {
+        bindings[i].binding = static_cast<uint32_t>(i);
+        bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bindings[i].descriptorCount = 1;
+        bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        bindings[i].pImmutableSamplers = nullptr;
+    }
+
+    // Descriptor Set Layout
+    VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layoutInfo.bindingCount = bindings.size();
+    layoutInfo.pBindings = bindings.data();
+    // VkDescriptorSetLayout descriptorSetLayout;
+    vkCreateDescriptorSetLayout(init.device.device, &layoutInfo, nullptr, &kern.descriptorSetLayout);
+
+    VkPushConstantRange pushConstantRange = {};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT; // or VERTEX/FRAGMENT
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(int);
+
+    // Pipeline Layout
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &kern.descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+    // VkPipelineLayout pipelineLayout;
+    vkCreatePipelineLayout(init.device.device, &pipelineLayoutInfo, nullptr, &kern.pipelineLayout);
+
+    // Create compute pipeline
+    // Shader stage
+    VkPipelineShaderStageCreateInfo stageInfo{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    stageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    stageInfo.module = shaderModule;
+    stageInfo.pName = "main";
+
+    VkComputePipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    pipelineInfo.stage = stageInfo;
+    pipelineInfo.layout = kern.pipelineLayout;
+    // VkPipeline pipeline;
+    vkCreateComputePipelines(init.device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &kern.pipeline);
+
+    // Create descriptor pool
+    VkDescriptorPoolSize poolSizes[] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, static_cast<uint32_t>(buffers.size())}};
+    VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+    poolInfo.pPoolSizes = poolSizes;
+    poolInfo.maxSets = 1;
+    // VkDescriptorPool descriptorPool;
+    vkCreateDescriptorPool(init.device.device, &poolInfo, nullptr, &kern.descriptorPool);
+
+    // Allocate descriptor set
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocInfo.descriptorPool = kern.descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &kern.descriptorSetLayout;
+    // VkDescriptorSet descriptorSet;
+    vkAllocateDescriptorSets(init.device.device, &allocInfo, &kern.descriptorSet);
+
+    std::vector<VkWriteDescriptorSet> writes(buffers.size());
+    std::vector<VkDescriptorBufferInfo> infos(buffers.size());
+
+    for (size_t i=0; i<buffers.size(); ++i) {
+        infos[i] = {buffers[i].buffer, 0, buffers[i].size};
+        writes[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, kern.descriptorSet, static_cast<uint32_t>(i), 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &infos[i]};
+    }
+
+    vkUpdateDescriptorSets(init.device.device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+
+    // Record command buffer
+    VkCommandBufferAllocateInfo cmdAllocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    cmdAllocInfo.commandPool = handler.commandPool;
+    cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdAllocInfo.commandBufferCount = 1;
+    // VkCommandBuffer cmdBuf;
+    vkAllocateCommandBuffers(init.device.device, &cmdAllocInfo, &kern.cmdBuf);
+
+    // Begin command buffer
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    vkBeginCommandBuffer(kern.cmdBuf, &beginInfo);
+
+    int shouldRed = 1;
+    vkCmdPushConstants(kern.cmdBuf, kern.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(int), &shouldRed);
+
+    vkCmdBindPipeline(kern.cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, kern.pipeline);
+    vkCmdBindDescriptorSets(kern.cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, kern.pipelineLayout, 0, 1, &kern.descriptorSet, 0, nullptr);
+
+    vkCmdDispatch(kern.cmdBuf, nThreads, 1, 1);
+
+    shouldRed = 0;
+    vkCmdPushConstants(kern.cmdBuf, kern.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(int), &shouldRed);
+
+    vkCmdDispatch(kern.cmdBuf, nThreads, 1, 1);
+    vkEndCommandBuffer(kern.cmdBuf);
+
+    return kern;
+}
+
 int main() {
     Init init;
     RenderData render_data;
@@ -483,7 +590,7 @@ int main() {
     if (0 != create_command_pool(init, compute_handler)) return -1;
 
     // Later will need a different render pass to draw standard geometry
-    const int gridSize = 128;
+    const int gridSize = 129;
     texture tex;
     tex.x = gridSize;
     tex.y = gridSize;
@@ -498,29 +605,50 @@ int main() {
     if (0 != create_sync_objects(init, render_data)) return -1;
 
     const int bufferSize = gridSize * gridSize * gridSize * sizeof(float);
+    const int nThreads = (gridSize * gridSize * gridSize + local_work_size - 1) / local_work_size;
 
-    buffer velocity = create_compute_buffer(init, bufferSize*3);
+    buffer vx = create_compute_buffer(init, bufferSize);
+    buffer vy = create_compute_buffer(init, bufferSize);
+    buffer vz = create_compute_buffer(init, bufferSize);
+
+    std::vector<buffer> buffersGaussSiedel = {vx, vy, vz};
+    VkShaderModule shaderGaussSiedel = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/gaussSiedel.spv"));
+    kernel kernGaussSiedel = gaussSiedelKernel(init, compute_handler, shaderGaussSiedel, buffersGaussSiedel, nThreads);
+
     buffer density = create_compute_buffer(init, bufferSize);
     buffer pressure = create_compute_buffer(init, bufferSize);
-    buffer velocity2 = create_compute_buffer(init, bufferSize*3);
+
+    buffer vx2 = create_compute_buffer(init, bufferSize);
+    buffer vy2 = create_compute_buffer(init, bufferSize);
+    buffer vz2 = create_compute_buffer(init, bufferSize);
     buffer density2 = create_compute_buffer(init, bufferSize);
     buffer pressure2 = create_compute_buffer(init, bufferSize);
-    std::vector<buffer> buffers = {velocity, density, pressure, velocity2, density2, pressure2};
-    std::vector<buffer> buffers2 = {velocity2, density2, pressure2, velocity, density, pressure};
+    std::vector<buffer> buffers = {vx, vy, vz, density, pressure, vx2, vy2, vz2, density2, pressure2};
+    std::vector<buffer> buffers2 = {vx2, vy2, vz2, density2, pressure2, vx, vy, vz, density, pressure};
 
-    std::vector<float> velocities = init_velocities(gridSize, 1.0f, 1.0f, 0.0f);
-    std::vector<float> densities = init_density(gridSize, 0.0f);
-    densities[0] = 1.0f;
+    // std::vector<float> velocities = init_velocities(gridSize, 1.0f, 0.0f, 0.0f);
+    std::vector<float> vxs = init_scalars(gridSize, 0.0f);
+    std::vector<float> vys = init_scalars(gridSize, 0.0f);
+    std::vector<float> vzs = init_scalars(gridSize, 0.0f);
+    std::vector<float> densities = init_scalars(gridSize, 0.0f);
+    // densities[50] = 1.0f;
+    vxs[gridSize*gridSize*64 + gridSize*50 + 0] = 10.0f;
+    // vys[0] = 1.0f;
+    // vys[50] = 1.0f;
+    // vxs[10] = -1.0f;
 
-    copy_to_buffer(init, velocity, velocities.data());
+    // copy_to_buffer(init, velocity, velocities.data());
+    copy_to_buffer(init, vx, vxs.data());
+    copy_to_buffer(init, vy, vys.data());
+    copy_to_buffer(init, vz, vzs.data());
     copy_to_buffer(init, density, densities.data());
 
     // print_vector(densities);
 
     VkShaderModule shaderModule = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/advect.spv"));
     // VkShaderModule shaderModule2 = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/advect2.spv"));
-    kernel kern = build_compute_kernal(init, compute_handler, shaderModule, buffers, textures, bufferSize);
-    kernel kern2 = build_compute_kernal(init, compute_handler, shaderModule, buffers2, textures, bufferSize);
+    kernel kern = build_compute_kernal(init, compute_handler, shaderModule, buffers, textures, nThreads);
+    kernel kern2 = build_compute_kernal(init, compute_handler, shaderModule, buffers2, textures, nThreads);
 
     // execute_kernel(init, compute_handler, kern);
 
@@ -533,13 +661,18 @@ int main() {
             std::cout << "failed to draw frame \n";
             return -1;
         }
+
+        for (int i=0; i<5; i++)
+        {
+            execute_kernel(init, compute_handler, kernGaussSiedel);
+        }
         
         if (toggle) {
             execute_kernel(init, compute_handler, kern2);
-            copy_from_buffer(init, density, densities.data());
+            // copy_from_buffer(init, density, densities.data());
         } else {
             execute_kernel(init, compute_handler, kern);
-            copy_from_buffer(init, density2, densities.data());
+            // copy_from_buffer(init, density2, densities.data());
         }
         toggle = !toggle;
 
@@ -549,11 +682,23 @@ int main() {
     }
     init.disp.deviceWaitIdle();
 
+    // copy_from_buffer(init, vz, vzs.data());
+    // print_vector(vzs);
+
+    // copy_from_buffer(init, vy, vys.data());
+    // print_vector(vys);
+
+    // copy_from_buffer(init, vx, vxs.data());
+    // print_vector(vxs);
+
+
     vkDestroyShaderModule(init.device.device, shaderModule, nullptr);
     cleanup(init, buffers);
+    cleanup(init, buffersGaussSiedel);
     cleanup(init, tex);
     cleanup(init, kern);
     cleanup(init, kern2);
+    cleanup(init, kernGaussSiedel);
     cleanup(init, compute_handler);
     cleanup(init, render_data);
 

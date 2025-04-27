@@ -1,0 +1,93 @@
+#version 450
+
+#extension GL_EXT_debug_printf : enable
+
+layout (local_size_x = 32) in;
+
+layout(binding = 0) buffer velXBuff { float vel_x[]; };
+layout(binding = 1) buffer velYBuff { float vel_y[]; };
+layout(binding = 2) buffer velZBuff { float vel_z[]; };
+// layout(binding = 3) buffer densityBuff { float density[]; };
+// layout(binding = 4) buffer pressureBuff { float pressure[]; };
+
+// layout(binding = 5) buffer velXBuff2 { float vel_x_2[]; };
+// layout(binding = 6) buffer velYBuff2 { float vel_y_2[]; };
+// layout(binding = 7) buffer velZBuff2 { float vel_z_2[]; };
+// layout(binding = 8) buffer density2Buff { float density2[]; };
+// layout(binding = 9) buffer pressure2Buff { float pressure2[]; };
+
+layout(push_constant) uniform Params {
+    int shouldRed;
+};
+
+const int gridSize = 129;
+const float dt = 0.1;
+const int dim = 3;
+const float overRelaxation = 1.9;
+
+vec3 get_grid_position(uint index) {
+    uint x = index % gridSize;
+    uint y = (index / gridSize) % gridSize;
+    uint z = index / (gridSize * gridSize);
+    return vec3(float(x), float(y), float(z));
+}
+
+int get_grid_index(ivec3 pos) {
+    return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
+}
+
+int is_red(uint index) {
+    return int(index % 2);
+}
+
+void gauss_siedel(uint gridIndex) {
+    vec3 pos = get_grid_position(gridIndex);
+    ivec3 p0 = ivec3(floor(pos));
+    ivec3 p1 = p0 + ivec3(1);
+    p0 = clamp(p0, 0, gridSize - 1);
+    p1 = clamp(p1, 0, gridSize - 1);
+
+    float vx0 = vel_x[get_grid_index(p0)];
+    float vx1 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
+
+    float vy0 = vel_y[get_grid_index(p0)];
+    float vy1 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
+
+    float vz0 = vel_z[get_grid_index(p0)];
+    float vz1 = vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
+
+    float div = overRelaxation*((vx1 - vx0) + (vy1 - vy0) + (vz1 - vz0));
+
+    vel_x[get_grid_index(p0)] = vx0 + div/8.0f;
+    vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))] = vx1 - div/8.0f;
+
+    vel_y[get_grid_index(p0)] = vy0 + div/8.0f;
+    vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))] = vy1 - div/8.0f;
+
+    vel_z[get_grid_index(p0)] = vz0 + div/8.0f;
+    vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))] = vz1 - div/8.0f;
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= gridSize * gridSize * gridSize) {
+        return;
+    }
+
+    // if (is_red(idx) && shouldRed == 1) {
+    //     return;
+    // }
+
+    if (is_red(idx) == shouldRed) {
+        return;
+    }
+
+    gauss_siedel(idx);
+    // vel_x[idx] = 1.0;
+
+
+    // vel_x[idx] = 1.0;
+    // return;
+
+    return;
+}
