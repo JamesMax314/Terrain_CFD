@@ -19,14 +19,28 @@ layout(binding = 6) buffer velYBuff2 { float vel_y2[]; };
 layout(binding = 7) buffer velZBuff2 { float vel_z2[]; };
 layout(binding = 8) buffer density2Buff { float density2[]; };
 layout(binding = 9) buffer pressure2Buff { float pressure2[]; };
+layout(binding = 10) buffer boundariesBuff { float b[]; };
 
-layout(binding = 10, rgba32f) writeonly uniform image3D outputTexture;
+layout(binding = 11, rgba32f) writeonly uniform image3D outputTexture;
 
 
 int get_grid_index(ivec3 pos) {
     return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
 }
 
+int get_grid_index_boundary(ivec3 pos, int mGridSize) {
+    return pos.x + pos.y * mGridSize + pos.z * mGridSize * mGridSize;
+}
+
+int get_x_vel_index(ivec3 pos) {
+    return pos.x + pos.y * (gridSize+1) + pos.z * (gridSize+1) * gridSize;
+}
+int get_y_vel_index(ivec3 pos) {
+    return pos.x + pos.y * gridSize + pos.z * (gridSize+1) * gridSize;
+}
+int get_z_vel_index(ivec3 pos) {
+    return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
+}
 // vec3 read_velocity(uint gridIndex) {
 //     vec3 vel;
 //     vel.x = velocity[gridIndex*dim];
@@ -102,8 +116,9 @@ vec3 get_grid_position(uint index) {
 
 vec3 get_full_vel_x(uint index) {
     vec3 pos = get_grid_position(index);
-    ivec3 p0 = ivec3(floor(pos));
+    ivec3 p0 = ivec3(pos);
     ivec3 p1 = p0 + ivec3(1);
+    ivec3 pm1 = p0 - ivec3(1);
     p0 = clamp(p0, 0, gridSize - 1);
     p1 = clamp(p1, 0, gridSize - 1);
 
@@ -210,6 +225,7 @@ void main() {
     vec3 vy = get_full_vel_y(idx);
     vec3 vz = get_full_vel_z(idx);
 
+    // vec3 newPosX = get_grid_position(idx) - vec3(0.01, 0.0, 0.0);//vx * dt;
     vec3 newPosX = get_grid_position(idx) - vx * dt;
     vec3 newPosY = get_grid_position(idx) - vy * dt;
     vec3 newPosZ = get_grid_position(idx) - vz * dt;
@@ -221,8 +237,8 @@ void main() {
     vel_x2[idx] = newVelX;
     vel_y2[idx] = newVelY;
     vel_z2[idx] = newVelZ;
-    float density = trilinearInterpolation_density(newPosX);
-    density2[idx] = density;
+    // float density = trilinearInterpolation_density(newPosX);
+    // density2[idx] = density;
 
 
     // vel_x2[idx] = vel_x[idx];
@@ -242,8 +258,9 @@ void main() {
     // pressure2[idx] = trilinearInterpolation_pressure(newPos);
 
     ivec3 coord = ivec3(get_grid_position(idx));
-    // imageStore(outputTexture, coord, vec4(abs(vel_x2[idx]), abs(vel_y2[idx]), abs(vel_z2[idx]), 1.0));
-    imageStore(outputTexture, coord, vec4(abs(newVelX), abs(newVelY), abs(newVelZ), 1.0));
+    imageStore(outputTexture, coord, vec4(abs(vel_x2[idx]), abs(vel_y2[idx]), abs(vel_z2[idx]), 1.0));
+    // imageStore(outputTexture, coord, vec4(abs(newVelX), abs(newVelY), abs(newVelZ), 1.0));
+    // imageStore(outputTexture, coord, vec4(abs(vx.x), abs(vx.y), abs(vx.z), 1.0));
     // imageStore(outputTexture, coord, vec4(1.0));
 }
 

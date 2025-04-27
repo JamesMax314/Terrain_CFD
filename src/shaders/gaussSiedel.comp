@@ -7,6 +7,7 @@ layout (local_size_x = 32) in;
 layout(binding = 0) buffer velXBuff { float vel_x[]; };
 layout(binding = 1) buffer velYBuff { float vel_y[]; };
 layout(binding = 2) buffer velZBuff { float vel_z[]; };
+layout(binding = 3) buffer boundariesBuff { float b[]; };
 // layout(binding = 3) buffer densityBuff { float density[]; };
 // layout(binding = 4) buffer pressureBuff { float pressure[]; };
 
@@ -36,41 +37,126 @@ int get_grid_index(ivec3 pos) {
     return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
 }
 
+int get_grid_index_boundary(ivec3 pos, int mGridSize) {
+    return pos.x + pos.y * mGridSize + pos.z * mGridSize * mGridSize;
+}
+
+int get_x_vel_index(ivec3 pos) {
+    return pos.x + pos.y * (gridSize+1) + pos.z * (gridSize+1) * gridSize;
+}
+int get_y_vel_index(ivec3 pos) {
+    return pos.x + pos.y * gridSize + pos.z * (gridSize+1) * gridSize;
+}
+int get_z_vel_index(ivec3 pos) {
+    return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
+}
+
 int is_red(uint index) {
     return int(index % 2);
 }
 
 void gauss_siedel(uint gridIndex) {
     vec3 pos = get_grid_position(gridIndex);
-    ivec3 p0 = ivec3(floor(pos));
-    ivec3 p1 = p0 + ivec3(1);
-    p0 = clamp(p0, 0, gridSize - 1);
-    p1 = clamp(p1, 0, gridSize - 1);
+    ivec3 p = ivec3(floor(pos)); // base grid coord
+    ivec3 p_boundary = p + ivec3(1); // shifted for boundary grid
 
-    float vx0 = vel_x[get_grid_index(p0)];
-    float vx1 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
+    p = clamp(p, 0, gridSize - 1); // just to be safe
+    p_boundary = clamp(p_boundary, 1, gridSize); // boundary grid limits
 
-    float vy0 = vel_y[get_grid_index(p0)];
-    float vy1 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
+    float vx0 = vel_x[get_x_vel_index(p)];
+    float vx1 = vel_x[get_x_vel_index(ivec3(p.x+1, p.y, p.z))];
 
-    float vz0 = vel_z[get_grid_index(p0)];
-    float vz1 = vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
+    float vy0 = vel_y[get_y_vel_index(p)];
+    float vy1 = vel_y[get_y_vel_index(ivec3(p.x, p.y+1, p.z))];
+
+    float vz0 = vel_z[get_z_vel_index(p)];
+    float vz1 = vel_z[get_z_vel_index(ivec3(p.x, p.y, p.z+1))];
 
     float div = overRelaxation*((vx1 - vx0) + (vy1 - vy0) + (vz1 - vz0));
 
-    vel_x[get_grid_index(p0)] = vx0 + div/8.0f;
-    vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))] = vx1 - div/8.0f;
+    // Look at neighboring boundary cells:
+    float b100  = b[get_grid_index_boundary(p_boundary + ivec3( 1, 0, 0), gridSize+2)];
+    float bm100 = b[get_grid_index_boundary(p_boundary + ivec3(-1, 0, 0), gridSize+2)];
+    float b010  = b[get_grid_index_boundary(p_boundary + ivec3( 0, 1, 0), gridSize+2)];
+    float bm010 = b[get_grid_index_boundary(p_boundary + ivec3( 0,-1, 0), gridSize+2)];
+    float b001  = b[get_grid_index_boundary(p_boundary + ivec3( 0, 0, 1), gridSize+2)];
+    float bm001 = b[get_grid_index_boundary(p_boundary + ivec3( 0, 0,-1), gridSize+2)];
 
-    vel_y[get_grid_index(p0)] = vy0 + div/8.0f;
-    vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))] = vy1 - div/8.0f;
+    float boundCoeff = b100 + bm100 + b010 + bm010 + b001 + bm001;
 
-    vel_z[get_grid_index(p0)] = vz0 + div/8.0f;
-    vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))] = vz1 - div/8.0f;
+    vel_x[get_x_vel_index(p)] = vx0 + bm100*div/boundCoeff;
+    vel_x[get_x_vel_index(ivec3(p.x+1, p.y, p.z))] = vx1 - b100*div/boundCoeff;
+
+    vel_y[get_y_vel_index(p)] = vy0 + bm010*div/boundCoeff;
+    vel_y[get_y_vel_index(ivec3(p.x, p.y+1, p.z))] = vy1 - b010*div/boundCoeff;
+
+    vel_z[get_z_vel_index(p)] = vz0 + bm001*div/boundCoeff;
+    vel_z[get_z_vel_index(ivec3(p.x, p.y, p.z+1))] = vz1 - b001*div/boundCoeff;
+
+
+    // vel_x[get_x_vel_index(p)] = bm100;
+    // vel_x[get_x_vel_index(ivec3(p.x+1, p.y, p.z))] = b100;
+
+    // vel_y[get_y_vel_index(p)] = bm010;
+    // vel_y[get_y_vel_index(ivec3(p.x, p.y+1, p.z))] = b010;
+
+    // vel_z[get_z_vel_index(p)] = bm001;
+    // vel_z[get_z_vel_index(ivec3(p.x, p.y, p.z+1))] = b001;
+
+    // Then your usual Gauss-Seidel update, etc...
 }
+
+
+// void gauss_siedel(uint gridIndex) {
+//     vec3 pos = get_grid_position(gridIndex);
+//     ivec3 p0 = ivec3(floor(pos));
+//     ivec3 p1 = p0 + ivec3(1);
+//     p0 = clamp(p0, 0, gridSize - 1);
+//     p1 = clamp(p1, 0, gridSize - 1);
+
+//     float vx0 = vel_x[get_grid_index(p0)];
+//     float vx1 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
+
+//     float vy0 = vel_y[get_grid_index(p0)];
+//     float vy1 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
+
+//     float vz0 = vel_z[get_grid_index(p0)];
+//     float vz1 = vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
+
+//     float div = overRelaxation*((vx1 - vx0) + (vy1 - vy0) + (vz1 - vz0));
+
+//     float b100 = b[get_grid_index_boundary(ivec3(p1.x + 1, p1.y, p1.z), gridSize+2)];
+//     float bm100 = b[get_grid_index_boundary(ivec3(p1.x - 1, p1.y, p1.z), gridSize+2)];
+//     float b010 = b[get_grid_index_boundary(ivec3(p1.x, p1.y + 1, p1.z), gridSize+2)];
+//     float bm010 = b[get_grid_index_boundary(ivec3(p1.x, p1.y - 1, p1.z), gridSize+2)];
+//     float b001 = b[get_grid_index_boundary(ivec3(p1.x, p1.y, p1.z + 1), gridSize+2)];
+//     float bm001 = b[get_grid_index_boundary(ivec3(p1.x, p1.y, p1.z - 1), gridSize+2)];
+
+//     float boundCoeff = b100 + bm100 + b010 + bm010 + b001 + bm001;
+//     // boundCoeff = boundCoeff / 6.0f;
+
+//     // vel_x[get_grid_index(p0)] = vx0 + bm100*div/boundCoeff;
+//     // vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))] = vx1 - b100*div/boundCoeff;
+
+//     // vel_y[get_grid_index(p0)] = vy0 + bm010*div/boundCoeff;
+//     // vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))] = vy1 - b010*div/boundCoeff;
+
+//     // vel_z[get_grid_index(p0)] = vz0 + bm001*div/boundCoeff;
+//     // vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))] = vz1 - b001*div/boundCoeff;
+
+//     vel_x[get_grid_index(p0)] = bm100;
+//     vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))] = b100;
+
+//     vel_y[get_grid_index(p0)] = bm010;
+//     vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))] = b010;
+
+//     vel_z[get_grid_index(p0)] = bm001;
+//     vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))] = b001;
+// }
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
-    if (idx >= gridSize * gridSize * gridSize) {
+    if (idx >= (gridSize) * gridSize * gridSize) {
         return;
     }
 

@@ -43,11 +43,47 @@ std::vector<float> init_scalars(size_t gridsize, float base_val) {
     return scalars;
 }
 
+std::vector<float> init_vels(size_t gridsize, float base_val) {
+    std::vector<float> scalars((gridsize+1) * gridsize * gridsize);
+    for (size_t i = 0; i < scalars.size(); i += 1) {
+        scalars[i] = base_val;
+    }
+    return scalars;
+}
+
+std::vector<float> init_boundaries(size_t gridsize) {
+    std::vector<float> scalars(gridsize * gridsize * gridsize);
+    for (size_t i = 0; i < scalars.size(); i += 1) {
+        uint x = i % gridsize;
+        uint y = (i / gridsize) % gridsize;
+        uint z = i / (gridsize * gridsize);
+        if (x % (gridsize-1) == 0 || y % (gridsize-1) == 0 || z % (gridsize-1) == 0) {
+            scalars[i] = 0.0;
+        } else {
+            scalars[i] = 1.0;
+        }
+    }
+    return scalars;
+}
+
 void print_vector(const std::vector<float>& vec) {
     for (const auto& val : vec) {
         std::cout << val << " ";
     }
     std::cout << "\n";
+    std::cout << "\n";
+}
+
+void print_matrix(const std::vector<float>& mat, size_t rows) {
+    for (size_t i = 0; i < rows; ++i) {
+        for (size_t j = 0; j < rows; ++j) {
+            for (size_t k = 0; k < rows; ++k) {
+                std::cout << mat[i * rows*rows + j*rows + k] << " ";
+            }
+            std::cout << "\n";
+        }
+        std::cout << "\n";
+    }
 }
 
 kernel build_compute_kernal(Init& init, ComputeHandler& handler, VkShaderModule& shaderModule, std::vector<buffer>& buffers, std::vector<texture>& textures, size_t nThreads) {
@@ -605,34 +641,41 @@ int main() {
     if (0 != create_sync_objects(init, render_data)) return -1;
 
     const int bufferSize = gridSize * gridSize * gridSize * sizeof(float);
+    const int velBufferSize = (gridSize+1) * gridSize * gridSize * sizeof(float);
+    const int boarderBufferSize = (gridSize+2) * (gridSize+2) * (gridSize+2) * sizeof(float);
     const int nThreads = (gridSize * gridSize * gridSize + local_work_size - 1) / local_work_size;
 
-    buffer vx = create_compute_buffer(init, bufferSize);
-    buffer vy = create_compute_buffer(init, bufferSize);
-    buffer vz = create_compute_buffer(init, bufferSize);
+    buffer vx = create_compute_buffer(init, velBufferSize);
+    buffer vy = create_compute_buffer(init, velBufferSize);
+    buffer vz = create_compute_buffer(init, velBufferSize);
+    buffer boundaries = create_compute_buffer(init, boarderBufferSize);
 
-    std::vector<buffer> buffersGaussSiedel = {vx, vy, vz};
+    std::vector<buffer> buffersGaussSiedel = {vx, vy, vz, boundaries};
     VkShaderModule shaderGaussSiedel = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/gaussSiedel.spv"));
     kernel kernGaussSiedel = gaussSiedelKernel(init, compute_handler, shaderGaussSiedel, buffersGaussSiedel, nThreads);
 
     buffer density = create_compute_buffer(init, bufferSize);
     buffer pressure = create_compute_buffer(init, bufferSize);
 
-    buffer vx2 = create_compute_buffer(init, bufferSize);
-    buffer vy2 = create_compute_buffer(init, bufferSize);
-    buffer vz2 = create_compute_buffer(init, bufferSize);
+    buffer vx2 = create_compute_buffer(init, velBufferSize);
+    buffer vy2 = create_compute_buffer(init, velBufferSize);
+    buffer vz2 = create_compute_buffer(init, velBufferSize);
     buffer density2 = create_compute_buffer(init, bufferSize);
     buffer pressure2 = create_compute_buffer(init, bufferSize);
-    std::vector<buffer> buffers = {vx, vy, vz, density, pressure, vx2, vy2, vz2, density2, pressure2};
-    std::vector<buffer> buffers2 = {vx2, vy2, vz2, density2, pressure2, vx, vy, vz, density, pressure};
+    std::vector<buffer> buffers = {vx, vy, vz, density, pressure, vx2, vy2, vz2, density2, pressure2, boundaries};
+    std::vector<buffer> buffers2 = {vx2, vy2, vz2, density2, pressure2, vx, vy, vz, density, pressure, boundaries};
 
     // std::vector<float> velocities = init_velocities(gridSize, 1.0f, 0.0f, 0.0f);
-    std::vector<float> vxs = init_scalars(gridSize, 0.0f);
-    std::vector<float> vys = init_scalars(gridSize, 0.0f);
-    std::vector<float> vzs = init_scalars(gridSize, 0.0f);
+    std::vector<float> vxs = init_vels(gridSize, 0.0f);
+    std::vector<float> vys = init_vels(gridSize, 0.0f);
+    std::vector<float> vzs = init_vels(gridSize, 0.0f);
     std::vector<float> densities = init_scalars(gridSize, 0.0f);
+    std::vector<float> boundariesVec = init_boundaries(gridSize+2);
     // densities[50] = 1.0f;
-    vxs[gridSize*gridSize*64 + gridSize*50 + 0] = 10.0f;
+    vxs[gridSize*gridSize*1 + gridSize*1 + 0] = 10.0f;
+    // vxs[gridSize*gridSize*64 + gridSize*64 + 10] = 100.0f;
+    // vxs[gridSize*gridSize*64 + gridSize*64 + 11] = 100.0f;
+    // vxs[gridSize*gridSize*64 + gridSize*64 + 12] = 100.0f;
     // vys[0] = 1.0f;
     // vys[50] = 1.0f;
     // vxs[10] = -1.0f;
@@ -642,6 +685,9 @@ int main() {
     copy_to_buffer(init, vy, vys.data());
     copy_to_buffer(init, vz, vzs.data());
     copy_to_buffer(init, density, densities.data());
+    copy_to_buffer(init, boundaries, boundariesVec.data());
+
+    // print_vector(boundariesVec);
 
     // print_vector(densities);
 
