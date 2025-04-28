@@ -734,6 +734,20 @@ int main() {
     // vys[50] = 1.0f;
     // vxs[10] = -1.0f;
 
+    // densities[gridSize*gridSize*64 + gridSize*45 + 0] = 1.0f;
+    int nStreams = 10;
+    int streamSize = gridSize / nStreams;
+    for (int i=0; i<nStreams; i++)
+    {
+        densities[gridSize*gridSize*64 + gridSize*i*streamSize + 0] = 2.0f;
+        // boundariesVec[(gridSize+2)*(gridSize+2)*(64+1) + (gridSize+2)*(i*streamSize+1) + (0+1)] = 0.0f;
+    }
+
+    for (int i=0; i<gridSize+2; i++)
+    {
+        boundariesVec[(gridSize+2)*(gridSize+2)*(64+1) + (gridSize+2)*(i) + (0+1)] = 0.0f;
+    }
+
     // copy_to_buffer(init, velocity, velocities.data());
     copy_to_buffer(init, vx, vxs.data());
     copy_to_buffer(init, vy, vys.data());
@@ -751,8 +765,10 @@ int main() {
     kernel kern2 = build_compute_kernal(init, compute_handler, shaderModule, buffers2, textures, nThreadsVel);
 
     VkShaderModule shaderModuleWrtieTex = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/writeTexture.spv"));
-    std::vector<buffer> buffersWriteTex = {vx, vy, vz};
+    std::vector<buffer> buffersWriteTex = {vx, vy, vz, density, pressure, density2, pressure2, boundaries};
+    std::vector<buffer> buffersWriteTex2 = {vx, vy, vz, density2, pressure2, density, pressure, boundaries};
     kernel kernWriteTex = build_compute_kernal(init, compute_handler, shaderModuleWrtieTex, buffersWriteTex, textures, nThreads);
+    kernel kernWriteTex2 = build_compute_kernal(init, compute_handler, shaderModuleWrtieTex, buffersWriteTex2, textures, nThreads);
 
     // execute_kernel(init, compute_handler, kern);
 
@@ -775,6 +791,7 @@ int main() {
         execute_kernel(init, compute_handler, kern2);
 
         execute_kernel(init, compute_handler, kernWriteTex);
+        execute_kernel(init, compute_handler, kernWriteTex2);
 
         
         // if (toggle) {
