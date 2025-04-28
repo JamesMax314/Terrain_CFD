@@ -28,6 +28,10 @@ int get_grid_index(ivec3 pos) {
     return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
 }
 
+// int get_grid_index(ivec3 pos, int mGridSize) {
+//     return pos.x + pos.y * mGridSize + pos.z * mGridSize * mGridSize;
+// }
+
 int get_grid_index_boundary(ivec3 pos, int mGridSize) {
     return pos.x + pos.y * mGridSize + pos.z * mGridSize * mGridSize;
 }
@@ -41,6 +45,18 @@ int get_y_vel_index(ivec3 pos) {
 int get_z_vel_index(ivec3 pos) {
     return pos.x + pos.y * gridSize + pos.z * gridSize * gridSize;
 }
+
+uint get_grid_ind(ivec3 pos, uint sizeX, uint sizeY, uint sizeZ) {
+    return pos.x + pos.y * sizeX + pos.z * sizeX * sizeY;
+}
+
+ivec3 bound_check(ivec3 pos, int sizeX, int sizeY, int sizeZ) {
+    pos.x = clamp(pos.x, 0, sizeX - 1);
+    pos.y = clamp(pos.y, 0, sizeY - 1);
+    pos.z = clamp(pos.z, 0, sizeZ - 1);
+    return pos;
+}
+
 // vec3 read_velocity(uint gridIndex) {
 //     vec3 vel;
 //     vel.x = velocity[gridIndex*dim];
@@ -114,33 +130,68 @@ vec3 get_grid_position(uint index) {
     return vec3(float(x), float(y), float(z));
 }
 
+vec3 get_grid_position_x(uint index) {
+    uint x = index % (gridSize+1);
+    uint y = (index / (gridSize+1)) % gridSize;
+    uint z = index / ((gridSize+1) * gridSize);
+    return vec3(float(x), float(y), float(z));
+}
+
+vec3 get_grid_position_y(uint index) {
+    uint x = index % gridSize;
+    uint y = (index / gridSize) % (gridSize+1);
+    uint z = index / (gridSize * (gridSize+1));
+    return vec3(float(x), float(y), float(z));
+}
+
+vec3 get_grid_position_z(uint index) {
+    uint x = index % gridSize;
+    uint y = (index / gridSize) % gridSize;
+    uint z = index / (gridSize * gridSize);
+    return vec3(float(x), float(y), float(z));
+}
+
+vec3 get_grid_pos(uint index, uint sizeX, uint sizeY, uint sizeZ) {
+    uint x = index % sizeX;
+    uint y = (index / sizeX) % sizeY;
+    uint z = index / (sizeX * sizeY);
+    return vec3(float(x), float(y), float(z));
+}
+
 vec3 get_full_vel_x(uint index) {
-    vec3 pos = get_grid_position(index);
-    ivec3 p0 = ivec3(pos);
-    ivec3 p1 = p0 + ivec3(1);
-    ivec3 pm1 = p0 - ivec3(1);
-    p0 = clamp(p0, 0, gridSize - 1);
-    p1 = clamp(p1, 0, gridSize - 1);
+    vec3 pos = get_grid_position_x(index);
+    ivec3 p_x = ivec3(pos);
+    ivec3 p_not_x = p_x - ivec3(1, 0, 0);
+    ivec3 p_not_x1 = p_not_x + ivec3(1);
 
-    float vx0 = vel_x[get_grid_index(p0)];
+    p_x = ivec3(clamp(p_x.x, 0, gridSize+1), clamp(p_x.yz, 0, gridSize));
 
-    float vy000 = vel_y[get_grid_index(p0)];
-    float vy100 = vel_y[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
-    float vy010 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
-    float vy110 = vel_y[get_grid_index(ivec3(p1.x, p1.y, p0.z))];
-    float vy001 = vel_y[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
-    float vy101 = vel_y[get_grid_index(ivec3(p1.x, p0.y, p1.z))];
-    float vy011 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p1.z))];
-    float vy111 = vel_y[get_grid_index(p1)];
+    ivec3 p_y = ivec3(clamp(p_not_x.x, 0, gridSize), clamp(p_not_x.y, 0, gridSize+1), clamp(p_not_x.z, 0, gridSize));
+    ivec3 p_y1 = ivec3(clamp(p_not_x1.x, 0, gridSize), clamp(p_not_x1.y, 0, gridSize+1), clamp(p_not_x1.z, 0, gridSize));
 
-    float vz000 = vel_z[get_grid_index(p0)];
-    float vz100 = vel_z[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
-    float vz010 = vel_z[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
-    float vz110 = vel_z[get_grid_index(ivec3(p1.x, p1.y, p0.z))];
-    float vz001 = vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
-    float vz101 = vel_z[get_grid_index(ivec3(p1.x, p0.y, p1.z))];
-    float vz011 = vel_z[get_grid_index(ivec3(p0.x, p1.y, p1.z))];
-    float vz111 = vel_z[get_grid_index(p1)];
+    ivec3 p_z = ivec3(clamp(p_not_x.x, 0, gridSize), clamp(p_not_x.y, 0, gridSize), clamp(p_not_x.z, 0, gridSize+1));
+    ivec3 p_z1 = ivec3(clamp(p_not_x1.x, 0, gridSize), clamp(p_not_x1.y, 0, gridSize), clamp(p_not_x1.z, 0, gridSize+1));
+
+    // float vx0 = vel_x[get_x_vel_index(p_x)];
+    float vx0 = vel_x[index];
+
+    float vy000 = vel_y[get_y_vel_index(p_y)];
+    float vy100 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y.y, p_y.z))];
+    float vy010 = vel_y[get_y_vel_index(ivec3(p_y.x, p_y1.y, p_y.z))];
+    float vy110 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y1.y, p_y.z))];
+    float vy001 = vel_y[get_y_vel_index(ivec3(p_y.x, p_y.y, p_y1.z))];
+    float vy101 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y.y, p_y1.z))];
+    float vy011 = vel_y[get_y_vel_index(ivec3(p_y.x, p_y1.y, p_y1.z))];
+    float vy111 = vel_y[get_y_vel_index(p_y1)];
+
+    float vz000 = vel_z[get_z_vel_index(p_z)];
+    float vz100 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z.y, p_z.z))];
+    float vz010 = vel_z[get_z_vel_index(ivec3(p_z.x, p_z1.y, p_z.z))];
+    float vz110 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z1.y, p_z.z))];
+    float vz001 = vel_z[get_z_vel_index(ivec3(p_z.x, p_z.y, p_z1.z))];
+    float vz101 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z.y, p_z1.z))];
+    float vz011 = vel_z[get_z_vel_index(ivec3(p_z.x, p_z1.y, p_z1.z))];
+    float vz111 = vel_z[get_z_vel_index(p_z1)];
 
     float avgVy = (vy000 + vy100 + vy010 + vy110 + vy001 + vy101 + vy011 + vy111) / 8.0f;
     float avgVz = (vz000 + vz100 + vz010 + vz110 + vz001 + vz101 + vz011 + vz111) / 8.0f;
@@ -150,74 +201,171 @@ vec3 get_full_vel_x(uint index) {
 }
 
 vec3 get_full_vel_y(uint index) {
-    vec3 pos = get_grid_position(index);
-    ivec3 p0 = ivec3(floor(pos));
-    ivec3 p1 = p0 + ivec3(1);
-    p0 = clamp(p0, 0, gridSize - 1);
-    p1 = clamp(p1, 0, gridSize - 1);
+    vec3 pos = get_grid_position_y(index);
+    ivec3 p_y = ivec3(pos);
+    ivec3 p_not_y = p_y - ivec3(0, 1, 0);
+    ivec3 p_not_y1 = p_not_y + ivec3(1);
 
-    float vy0 = vel_y[get_grid_index(p0)];
+    p_y = ivec3(clamp(p_y.x, 0, gridSize), clamp(p_y.y, 0, gridSize+1), clamp(p_y.z, 0, gridSize));
 
-    float vx000 = vel_x[get_grid_index(p0)];
-    float vx100 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
-    float vx010 = vel_x[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
-    float vx110 = vel_x[get_grid_index(ivec3(p1.x, p1.y, p0.z))];
-    float vx001 = vel_x[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
-    float vx101 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p1.z))];
-    float vx011 = vel_x[get_grid_index(ivec3(p0.x, p1.y, p1.z))];
-    float vx111 = vel_x[get_grid_index(p1)];
+    ivec3 p_x = ivec3(clamp(p_not_y.x, 0, gridSize+1), clamp(p_not_y.y, 0, gridSize), clamp(p_not_y.z, 0, gridSize));
+    ivec3 p_x1 = ivec3(clamp(p_not_y1.x, 0, gridSize+1), clamp(p_not_y1.y, 0, gridSize), clamp(p_not_y1.z, 0, gridSize));
 
-    float vz000 = vel_z[get_grid_index(p0)];
-    float vz100 = vel_z[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
-    float vz010 = vel_z[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
-    float vz110 = vel_z[get_grid_index(ivec3(p1.x, p1.y, p0.z))];
-    float vz001 = vel_z[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
-    float vz101 = vel_z[get_grid_index(ivec3(p1.x, p0.y, p1.z))];
-    float vz011 = vel_z[get_grid_index(ivec3(p0.x, p1.y, p1.z))];
-    float vz111 = vel_z[get_grid_index(p1)];
+    ivec3 p_z = ivec3(clamp(p_not_y.x, 0, gridSize), clamp(p_not_y.y, 0, gridSize), clamp(p_not_y.z, 0, gridSize+1));
+    ivec3 p_z1 = ivec3(clamp(p_not_y1.x, 0, gridSize), clamp(p_not_y1.y, 0, gridSize), clamp(p_not_y1.z, 0, gridSize+1));
+
+    float vy0 = vel_y[get_y_vel_index(p_y)];
+
+    float vx000 = vel_x[get_x_vel_index(p_x)];
+    float vx100 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x.y, p_x.z))];
+    float vx010 = vel_x[get_x_vel_index(ivec3(p_x.x, p_x1.y, p_x.z))];
+    float vx110 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x1.y, p_x.z))];
+    float vx001 = vel_x[get_x_vel_index(ivec3(p_x.x, p_x.y, p_x1.z))];
+    float vx101 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x.y, p_x1.z))];
+    float vx011 = vel_x[get_x_vel_index(ivec3(p_x.x, p_x1.y, p_x1.z))];
+    float vx111 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x1.y, p_x1.z))];
+
+    float vz000 = vel_z[get_z_vel_index(p_z)];
+    float vz100 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z.y, p_z.z))];
+    float vz010 = vel_z[get_z_vel_index(ivec3(p_z.x, p_z1.y, p_z.z))];
+    float vz110 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z1.y, p_z.z))];
+    float vz001 = vel_z[get_z_vel_index(ivec3(p_z.x, p_z.y, p_z1.z))];
+    float vz101 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z.y, p_z1.z))];
+    float vz011 = vel_z[get_z_vel_index(ivec3(p_z.x, p_z1.y, p_z1.z))];
+    float vz111 = vel_z[get_z_vel_index(ivec3(p_z1.x, p_z1.y, p_z1.z))];
 
     float avgVx = (vx000 + vx100 + vx010 + vx110 + vx001 + vx101 + vx011 + vx111) / 8.0f;
     float avgVz = (vz000 + vz100 + vz010 + vz110 + vz001 + vz101 + vz011 + vz111) / 8.0f;
+
     vec3 vel = vec3(avgVx, vy0, avgVz);
     return vel;
 }
 
 vec3 get_full_vel_z(uint index) {
-    vec3 pos = get_grid_position(index);
-    ivec3 p0 = ivec3(floor(pos));
-    ivec3 p1 = p0 + ivec3(1);
-    p0 = clamp(p0, 0, gridSize - 1);
-    p1 = clamp(p1, 0, gridSize - 1);
+    vec3 pos = get_grid_position_z(index);
+    ivec3 p_z = ivec3(pos);
+    ivec3 p_not_z = p_z - ivec3(0, 0, 1);
+    ivec3 p_not_z1 = p_not_z + ivec3(1);
 
-    float vz0 = vel_z[get_grid_index(p0)];
+    p_z = ivec3(clamp(p_z.x, 0, gridSize), clamp(p_z.y, 0, gridSize), clamp(p_z.z, 0, gridSize+1));
 
-    float vx000 = vel_x[get_grid_index(p0)];
-    float vx100 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
-    float vx010 = vel_x[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
-    float vx110 = vel_x[get_grid_index(ivec3(p1.x, p1.y, p0.z))];
-    float vx001 = vel_x[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
-    float vx101 = vel_x[get_grid_index(ivec3(p1.x, p0.y, p1.z))];
-    float vx011 = vel_x[get_grid_index(ivec3(p0.x, p1.y, p1.z))];
-    float vx111 = vel_x[get_grid_index(p1)];
+    ivec3 p_x = ivec3(clamp(p_not_z.x, 0, gridSize+1), clamp(p_not_z.y, 0, gridSize), clamp(p_not_z.z, 0, gridSize));
+    ivec3 p_x1 = ivec3(clamp(p_not_z1.x, 0, gridSize+1), clamp(p_not_z1.y, 0, gridSize), clamp(p_not_z1.z, 0, gridSize));
 
-    float vy000 = vel_y[get_grid_index(p0)];
-    float vy100 = vel_y[get_grid_index(ivec3(p1.x, p0.y, p0.z))];
-    float vy010 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p0.z))];
-    float vy110 = vel_y[get_grid_index(ivec3(p1.x, p1.y, p0.z))];
-    float vy001 = vel_y[get_grid_index(ivec3(p0.x, p0.y, p1.z))];
-    float vy101 = vel_y[get_grid_index(ivec3(p1.x, p0.y, p1.z))];
-    float vy011 = vel_y[get_grid_index(ivec3(p0.x, p1.y, p1.z))];
-    float vy111 = vel_y[get_grid_index(p1)];
+    ivec3 p_y = ivec3(clamp(p_not_z.x, 0, gridSize), clamp(p_not_z.y, 0, gridSize+1), clamp(p_not_z.z, 0, gridSize));
+    ivec3 p_y1 = ivec3(clamp(p_not_z1.x, 0, gridSize), clamp(p_not_z1.y, 0, gridSize+1), clamp(p_not_z1.z, 0, gridSize));
+
+    float vz0 = vel_z[get_z_vel_index(p_z)];
+
+    float vx000 = vel_x[get_x_vel_index(p_x)];
+    float vx100 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x.y, p_x.z))];
+    float vx010 = vel_x[get_x_vel_index(ivec3(p_x.x, p_x1.y, p_x.z))];
+    float vx110 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x1.y, p_x.z))];
+    float vx001 = vel_x[get_x_vel_index(ivec3(p_x.x, p_x.y, p_x1.z))];
+    float vx101 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x.y, p_x1.z))];
+    float vx011 = vel_x[get_x_vel_index(ivec3(p_x.x, p_x1.y, p_x1.z))];
+    float vx111 = vel_x[get_x_vel_index(ivec3(p_x1.x, p_x1.y, p_x1.z))];
+
+    float vy000 = vel_y[get_y_vel_index(p_y)];
+    float vy100 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y.y, p_y.z))];
+    float vy010 = vel_y[get_y_vel_index(ivec3(p_y.x, p_y1.y, p_y.z))];
+    float vy110 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y1.y, p_y.z))];
+    float vy001 = vel_y[get_y_vel_index(ivec3(p_y.x, p_y.y, p_y1.z))];
+    float vy101 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y.y, p_y1.z))];
+    float vy011 = vel_y[get_y_vel_index(ivec3(p_y.x, p_y1.y, p_y1.z))];
+    float vy111 = vel_y[get_y_vel_index(ivec3(p_y1.x, p_y1.y, p_y1.z))];
 
     float avgVx = (vx000 + vx100 + vx010 + vx110 + vx001 + vx101 + vx011 + vx111) / 8.0f;
     float avgVy = (vy000 + vy100 + vy010 + vy110 + vy001 + vy101 + vy011 + vy111) / 8.0f;
+
     vec3 vel = vec3(avgVx, avgVy, vz0);
     return vel;
 }
 
+float interpolate_velX(vec3 pos) {
+    ivec3 p0 = ivec3(floor(pos));
+    ivec3 p1 = p0 + ivec3(1);
+
+    p0 = bound_check(p0, gridSize+1, gridSize, gridSize);
+    p1 = bound_check(p1, gridSize+1, gridSize, gridSize);
+
+    vec3 f = fract(pos);
+
+    float v000 = vel_x[get_x_vel_index(p0)];
+    float v100 = vel_x[get_x_vel_index(ivec3(p1.x, p0.y, p0.z))];
+    float v010 = vel_x[get_x_vel_index(ivec3(p0.x, p1.y, p0.z))];
+    float v110 = vel_x[get_x_vel_index(ivec3(p1.x, p1.y, p0.z))];
+    float v001 = vel_x[get_x_vel_index(ivec3(p0.x, p0.y, p1.z))];
+    float v101 = vel_x[get_x_vel_index(ivec3(p1.x, p0.y, p1.z))];
+    float v011 = vel_x[get_x_vel_index(ivec3(p0.x, p1.y, p1.z))];
+    float v111 = vel_x[get_x_vel_index(p1)];
+    float v00 = mix(v000, v100, f.x);
+    float v10 = mix(v010, v110, f.x);
+    float v01 = mix(v001, v101, f.x);
+    float v11 = mix(v011, v111, f.x);
+    float v0 = mix(v00, v10, f.y);
+    float v1 = mix(v01, v11, f.y);
+
+    return mix(v0, v1, f.z);
+}
+
+float interpolate_velY(vec3 pos) {
+    ivec3 p0 = ivec3(floor(pos));
+    ivec3 p1 = p0 + ivec3(1);
+
+    p0 = bound_check(p0, gridSize, gridSize+1, gridSize);
+    p1 = bound_check(p1, gridSize, gridSize+1, gridSize);
+
+    vec3 f = fract(pos);
+
+    float v000 = vel_y[get_y_vel_index(p0)];
+    float v100 = vel_y[get_y_vel_index(ivec3(p1.x, p0.y, p0.z))];
+    float v010 = vel_y[get_y_vel_index(ivec3(p0.x, p1.y, p0.z))];
+    float v110 = vel_y[get_y_vel_index(ivec3(p1.x, p1.y, p0.z))];
+    float v001 = vel_y[get_y_vel_index(ivec3(p0.x, p0.y, p1.z))];
+    float v101 = vel_y[get_y_vel_index(ivec3(p1.x, p0.y, p1.z))];
+    float v011 = vel_y[get_y_vel_index(ivec3(p0.x, p1.y, p1.z))];
+    float v111 = vel_y[get_y_vel_index(p1)];
+    float v00 = mix(v000, v100, f.x);
+    float v10 = mix(v010, v110, f.x);
+    float v01 = mix(v001, v101, f.x);
+    float v11 = mix(v011, v111, f.x);
+    float v0 = mix(v00, v10, f.y);
+    float v1 = mix(v01, v11, f.y);
+
+    return mix(v0, v1, f.z);
+}
+
+float interpolate_velZ(vec3 pos) {
+    ivec3 p0 = ivec3(floor(pos));
+    ivec3 p1 = p0 + ivec3(1);
+
+    p0 = bound_check(p0, gridSize, gridSize, gridSize+1);
+    p1 = bound_check(p1, gridSize, gridSize, gridSize+1);
+
+    vec3 f = fract(pos);
+
+    float v000 = vel_z[get_z_vel_index(p0)];
+    float v100 = vel_z[get_z_vel_index(ivec3(p1.x, p0.y, p0.z))];
+    float v010 = vel_z[get_z_vel_index(ivec3(p0.x, p1.y, p0.z))];
+    float v110 = vel_z[get_z_vel_index(ivec3(p1.x, p1.y, p0.z))];
+    float v001 = vel_z[get_z_vel_index(ivec3(p0.x, p0.y, p1.z))];
+    float v101 = vel_z[get_z_vel_index(ivec3(p1.x, p0.y, p1.z))];
+    float v011 = vel_z[get_z_vel_index(ivec3(p0.x, p1.y, p1.z))];
+    float v111 = vel_z[get_z_vel_index(p1)];
+    float v00 = mix(v000, v100, f.x);
+    float v10 = mix(v010, v110, f.x);
+    float v01 = mix(v001, v101, f.x);
+    float v11 = mix(v011, v111, f.x);
+    float v0 = mix(v00, v10, f.y);
+    float v1 = mix(v01, v11, f.y);
+
+    return mix(v0, v1, f.z);
+}
+
 void main() {
     uint idx = gl_GlobalInvocationID.x;
-    if (idx >= gridSize * gridSize * gridSize) {
+    if (idx >= (gridSize+1) * gridSize * gridSize) {
         return;
     }
 
@@ -226,13 +374,30 @@ void main() {
     vec3 vz = get_full_vel_z(idx);
 
     // vec3 newPosX = get_grid_position(idx) - vec3(0.01, 0.0, 0.0);//vx * dt;
-    vec3 newPosX = get_grid_position(idx) - vx * dt;
-    vec3 newPosY = get_grid_position(idx) - vy * dt;
-    vec3 newPosZ = get_grid_position(idx) - vz * dt;
+    // vx = vec3(0.1, 0.0, 0.0);
+    vec3 newPosX = get_grid_position_x(idx) - vx * dt;
+    vec3 newPosY = get_grid_position_y(idx) - vy * dt;
+    vec3 newPosZ = get_grid_position_z(idx) - vz * dt;
 
-    float newVelX = trilinearInterpolation_velX(newPosX);
-    float newVelY = trilinearInterpolation_velY(newPosY);
-    float newVelZ = trilinearInterpolation_velZ(newPosZ);
+    // float newVelX = trilinearInterpolation_velX(newPosX);
+    // float newVelY = trilinearInterpolation_velY(newPosY);
+    // float newVelZ = trilinearInterpolation_velZ(newPosZ);
+
+    float newVelX = interpolate_velX(newPosX);
+    float newVelY = interpolate_velY(newPosY);
+    float newVelZ = interpolate_velZ(newPosZ);
+
+    // vel_x2[idx] = vx.x;
+    // vel_y2[idx] = vy.y;
+    // vel_z2[idx] = vz.z;
+
+    // vel_x2[idx] = vel_x[idx];
+    // vel_y2[idx] = vel_y[idx];
+    // vel_z2[idx] = vel_z[idx];
+    // vel_y2[idx] = 0.0;
+    // vel_z2[idx] = 0.0;
+
+
 
     vel_x2[idx] = newVelX;
     vel_y2[idx] = newVelY;
@@ -257,8 +422,9 @@ void main() {
     // density2[idx] = density;
     // pressure2[idx] = trilinearInterpolation_pressure(newPos);
 
-    ivec3 coord = ivec3(get_grid_position(idx));
-    imageStore(outputTexture, coord, vec4(abs(vel_x2[idx]), abs(vel_y2[idx]), abs(vel_z2[idx]), 1.0));
+    // ivec3 coord = ivec3(get_grid_position(idx));
+    // imageStore(outputTexture, coord, vec4(abs(0.0), abs(1.0), abs(1.0), 1.0));
+    // imageStore(outputTexture, coord, vec4(abs(vel_x2[idx]), abs(vel_y2[idx]), abs(vel_z2[idx]), 1.0));
     // imageStore(outputTexture, coord, vec4(abs(newVelX), abs(newVelY), abs(newVelZ), 1.0));
     // imageStore(outputTexture, coord, vec4(abs(vx.x), abs(vx.y), abs(vx.z), 1.0));
     // imageStore(outputTexture, coord, vec4(1.0));

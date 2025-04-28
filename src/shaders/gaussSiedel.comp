@@ -84,6 +84,10 @@ void gauss_siedel(uint gridIndex) {
 
     float boundCoeff = b100 + bm100 + b010 + bm010 + b001 + bm001;
 
+    if (boundCoeff == 0.0) {
+        return;
+    }
+
     vel_x[get_x_vel_index(p)] = vx0 + bm100*div/boundCoeff;
     vel_x[get_x_vel_index(ivec3(p.x+1, p.y, p.z))] = vx1 - b100*div/boundCoeff;
 

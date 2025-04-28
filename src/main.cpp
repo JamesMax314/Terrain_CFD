@@ -46,17 +46,53 @@ std::vector<float> init_scalars(size_t gridsize, float base_val) {
 std::vector<float> init_vels(size_t gridsize, float base_val) {
     std::vector<float> scalars((gridsize+1) * gridsize * gridsize);
     for (size_t i = 0; i < scalars.size(); i += 1) {
+        uint x = i % gridsize;
+        uint y = (i / gridsize) % gridsize;
+        uint z = i / (gridsize * gridsize);
         scalars[i] = base_val;
+        // if (sqrt(pow(x - (gridsize-1)/2, 2) + pow(y - (gridsize-1)/2, 2)) < 10) {
+        //     scalars[i] = 0.0;
+        // }
     }
     return scalars;
 }
 
-std::vector<float> init_boundaries(size_t gridsize) {
+std::vector<float> init_cylinder(float base_val, int sizeX, int sizeY, int sizeZ, int radius) {
+    std::vector<float> scalars(sizeX * sizeY * sizeZ);
+    for (int i = 0; i < scalars.size(); i += 1) {
+        int x = i % sizeX;
+        int y = (i / sizeX) % sizeY;
+        int z = i / (sizeX * sizeY);
+        if (pow(x - (sizeX-1)/2, 2) + pow(y - (sizeY-1)/2, 2) < radius * radius) {
+            scalars[i] = 0.0;
+        } else {
+            scalars[i] = base_val;
+        }
+    }
+    return scalars;
+}
+
+std::vector<float> init_wall(float base_val, int sizeX, int sizeY, int sizeZ) {
+    std::vector<float> scalars(sizeX * sizeY * sizeZ);
+    for (int i = 0; i < scalars.size(); i += 1) {
+        int x = i % sizeX;
+        int y = (i / sizeX) % sizeY;
+        int z = i / (sizeX * sizeY);
+        if (x == 0 || x == sizeX-1) {
+            scalars[i] = base_val;
+        } else {
+            scalars[i] = 0.0;
+        }
+    }
+    return scalars;
+}
+
+std::vector<float> init_boundaries(int gridsize) {
     std::vector<float> scalars(gridsize * gridsize * gridsize);
-    for (size_t i = 0; i < scalars.size(); i += 1) {
-        uint x = i % gridsize;
-        uint y = (i / gridsize) % gridsize;
-        uint z = i / (gridsize * gridsize);
+    for (int i = 0; i < scalars.size(); i += 1) {
+        int x = i % gridsize;
+        int y = (i / gridsize) % gridsize;
+        int z = i / (gridsize * gridsize);
         if (x % (gridsize-1) == 0 || y % (gridsize-1) == 0 || z % (gridsize-1) == 0) {
             scalars[i] = 0.0;
         } else {
@@ -64,6 +100,18 @@ std::vector<float> init_boundaries(size_t gridsize) {
         }
     }
     return scalars;
+}
+
+void add_boundary_cylinder(std::vector<float>& boundaries, int rad, int posX, int posY, int gridsize) {
+    for (int i = 0; i < boundaries.size(); i += 1) {
+        int x = i % gridsize;
+        int y = (i / gridsize) % gridsize;
+        int z = i / (gridsize * gridsize);
+
+        if (pow(x-1-posX - (gridsize-1)/2, 2) + pow(y-1-posY - (gridsize-1)/2, 2) < rad*rad) {
+            boundaries[i] = 0.0;
+        }
+    }
 }
 
 void print_vector(const std::vector<float>& vec) {
@@ -644,6 +692,7 @@ int main() {
     const int velBufferSize = (gridSize+1) * gridSize * gridSize * sizeof(float);
     const int boarderBufferSize = (gridSize+2) * (gridSize+2) * (gridSize+2) * sizeof(float);
     const int nThreads = (gridSize * gridSize * gridSize + local_work_size - 1) / local_work_size;
+    const int nThreadsVel = ((gridSize+1) * gridSize * gridSize + local_work_size - 1) / local_work_size;
 
     buffer vx = create_compute_buffer(init, velBufferSize);
     buffer vy = create_compute_buffer(init, velBufferSize);
@@ -666,13 +715,18 @@ int main() {
     std::vector<buffer> buffers2 = {vx2, vy2, vz2, density2, pressure2, vx, vy, vz, density, pressure, boundaries};
 
     // std::vector<float> velocities = init_velocities(gridSize, 1.0f, 0.0f, 0.0f);
-    std::vector<float> vxs = init_vels(gridSize, 0.0f);
+    // std::vector<float> vxs = init_vels(gridSize, 0.0f);
+    std::vector<float> vxs = init_wall(1.0f, gridSize+1, gridSize, gridSize);
     std::vector<float> vys = init_vels(gridSize, 0.0f);
     std::vector<float> vzs = init_vels(gridSize, 0.0f);
     std::vector<float> densities = init_scalars(gridSize, 0.0f);
     std::vector<float> boundariesVec = init_boundaries(gridSize+2);
+    add_boundary_cylinder(boundariesVec, 10, 0, 0, gridSize+2);
+    add_boundary_cylinder(boundariesVec, 10, -20, -20, gridSize+2);
     // densities[50] = 1.0f;
-    vxs[gridSize*gridSize*1 + gridSize*1 + 0] = 10.0f;
+    // vxs[gridSize*(gridSize+1)*1 + (gridSize+1)*64 + 64] = 100.0f;
+    // vys[gridSize*gridSize*0 + gridSize*50 + 50] = 10000.0f;
+    // vxs[gridSize*gridSize*0 + gridSize*50 + 10] = -100.0f;
     // vxs[gridSize*gridSize*64 + gridSize*64 + 10] = 100.0f;
     // vxs[gridSize*gridSize*64 + gridSize*64 + 11] = 100.0f;
     // vxs[gridSize*gridSize*64 + gridSize*64 + 12] = 100.0f;
@@ -693,8 +747,12 @@ int main() {
 
     VkShaderModule shaderModule = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/advect.spv"));
     // VkShaderModule shaderModule2 = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/advect2.spv"));
-    kernel kern = build_compute_kernal(init, compute_handler, shaderModule, buffers, textures, nThreads);
-    kernel kern2 = build_compute_kernal(init, compute_handler, shaderModule, buffers2, textures, nThreads);
+    kernel kern = build_compute_kernal(init, compute_handler, shaderModule, buffers, textures, nThreadsVel);
+    kernel kern2 = build_compute_kernal(init, compute_handler, shaderModule, buffers2, textures, nThreadsVel);
+
+    VkShaderModule shaderModuleWrtieTex = createShaderModule(init, readFile(std::string(SHADER_DIR) + "/writeTexture.spv"));
+    std::vector<buffer> buffersWriteTex = {vx, vy, vz};
+    kernel kernWriteTex = build_compute_kernal(init, compute_handler, shaderModuleWrtieTex, buffersWriteTex, textures, nThreads);
 
     // execute_kernel(init, compute_handler, kern);
 
@@ -708,19 +766,25 @@ int main() {
             return -1;
         }
 
-        for (int i=0; i<5; i++)
+        for (int i=0; i<10; i++)
         {
             execute_kernel(init, compute_handler, kernGaussSiedel);
         }
+
+        execute_kernel(init, compute_handler, kern);
+        execute_kernel(init, compute_handler, kern2);
+
+        execute_kernel(init, compute_handler, kernWriteTex);
+
         
-        if (toggle) {
-            execute_kernel(init, compute_handler, kern2);
-            // copy_from_buffer(init, density, densities.data());
-        } else {
-            execute_kernel(init, compute_handler, kern);
-            // copy_from_buffer(init, density2, densities.data());
-        }
-        toggle = !toggle;
+        // if (toggle) {
+        //     execute_kernel(init, compute_handler, kern2);
+        //     // copy_from_buffer(init, density, densities.data());
+        // } else {
+        //     execute_kernel(init, compute_handler, kern);
+        //     // copy_from_buffer(init, density2, densities.data());
+        // }
+        // toggle = !toggle;
 
         // copy_to_buffer(init, density, densities.data());
         // kern = build_kernal(init, compute_handler, shaderModule, buffers, bufferSize);

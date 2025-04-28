@@ -1,0 +1,65 @@
+#version 450
+
+#extension GL_EXT_debug_printf : enable
+
+layout (local_size_x = 32) in;
+
+const int gridSize = 129;
+const float dt = 0.1;
+const int dim = 3;
+
+layout(binding = 0) buffer velXBuff { float vel_x[]; };
+layout(binding = 1) buffer velYBuff { float vel_y[]; };
+layout(binding = 2) buffer velZBuff { float vel_z[]; };
+
+layout(binding = 3, rgba32f) writeonly uniform image3D outputTexture;
+
+uint get_grid_ind(ivec3 pos, uint sizeX, uint sizeY, uint sizeZ) {
+    return pos.x + pos.y * sizeX + pos.z * sizeX * sizeY;
+}
+
+vec3 get_grid_position(uint index) {
+    uint x = index % gridSize;
+    uint y = (index / gridSize) % gridSize;
+    uint z = index / (gridSize * gridSize);
+    return vec3(float(x), float(y), float(z));
+}
+
+float cell_vellX(ivec3 pos) {
+    ivec3 p1 = pos + ivec3(1, 0, 0);
+
+    float v1 = vel_x[get_grid_ind(pos, gridSize + 1, gridSize, gridSize)];
+    float v2 = vel_x[get_grid_ind(p1, gridSize + 1, gridSize, gridSize)];
+    return (v1 + v2) * 0.5;
+}
+
+float cell_vellY(ivec3 pos) {
+    ivec3 p1 = pos + ivec3(0, 1, 0);
+
+    float v1 = vel_y[get_grid_ind(pos, gridSize, gridSize + 1, gridSize)];
+    float v2 = vel_y[get_grid_ind(p1, gridSize, gridSize + 1, gridSize)];
+    return (v1 + v2) * 0.5;
+}
+
+float cell_vellZ(ivec3 pos) {
+    ivec3 p1 = pos + ivec3(0, 0, 1);
+
+    float v1 = vel_z[get_grid_ind(pos, gridSize, gridSize, gridSize + 1)];
+    float v2 = vel_z[get_grid_ind(p1, gridSize, gridSize, gridSize + 1)];
+    return (v1 + v2) * 0.5;
+}
+
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= gridSize * gridSize * gridSize) {
+        return;
+    }
+
+    ivec3 pos = ivec3(get_grid_position(idx));
+    float vel_x2 = cell_vellX(pos);
+    float vel_y2 = cell_vellY(pos);
+    float vel_z2 = cell_vellZ(pos);
+
+    imageStore(outputTexture, pos, vec4(abs(vel_x2), abs(vel_y2), abs(vel_z2), 1.0));
+}
