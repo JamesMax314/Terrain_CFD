@@ -30,7 +30,7 @@ VkSurfaceKHR create_surface_glfw(VkInstance instance, GLFWwindow* window, VkAllo
 }
 
 int device_initialization(Init& init) {
-    init.window = create_window_glfw("Vulkan Triangle", true);
+    init.window = create_window_glfw("Thermal CFD", true);
 
     vkb::InstanceBuilder instance_builder;
     auto instance_ret = instance_builder.use_default_debug_messenger().request_validation_layers().build();
@@ -204,7 +204,7 @@ int create_graphics_pipeline(Init& init, RenderData& data) {
     VkPipelineInputAssemblyStateCreateInfo input_assembly = {};
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    input_assembly.primitiveRestartEnable = VK_FALSE;
+    input_assembly.primitiveRestartEnable = VK_TRUE;
 
     VkViewport viewport = {};
     viewport.x = 0.0f;

@@ -40,6 +40,7 @@ int get_comp_queue(Init& init, ComputeHandler& handler);
 int create_command_pool(Init& init, ComputeHandler& handler);
 
 buffer create_compute_buffer(Init& init, VkDeviceSize size);
+int create_command_buffers(Init& init, RenderData& data, std::vector<texture>& textures);
 
 void copy_to_buffer(Init& init, buffer& buf, void* data);
 void copy_from_buffer(Init& init, buffer& buf, void* data);

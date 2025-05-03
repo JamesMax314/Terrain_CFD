@@ -266,7 +266,7 @@ void cleanup(Init& init, std::vector<buffer>& buffers) {
 }
 
 void cleanup(Init& init, ComputeHandler& handler) {
-    vkFreeCommandBuffers(init.device.device, handler.commandPool, 1, &handler.commandBuffer);
+    // vkFreeCommandBuffers(init.device, handler.commandPool, 1, &handler.commandBuffer);
     vkDestroyCommandPool(init.device, handler.commandPool, nullptr);
 }
 

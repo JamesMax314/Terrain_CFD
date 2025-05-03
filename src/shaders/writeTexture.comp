@@ -4,9 +4,16 @@
 
 layout (local_size_x = 32) in;
 
-const int gridSize = 129;
+// const int gridSize = 129;
 const float dt = 0.1;
 const int dim = 3;
+
+layout(push_constant) uniform PushConstants {
+    int gridSize;
+    int shouldRed;
+} pushConstants;
+
+int gridSize = pushConstants.gridSize;
 
 layout(binding = 0) buffer velXBuff { float vel_x[]; };
 layout(binding = 1) buffer velYBuff { float vel_y[]; };
@@ -115,5 +122,8 @@ void main() {
 
     // imageStore(outputTexture, pos, vec4(abs(vel_x2), abs(vel_y2), abs(vel_z2), 1.0));
     // imageStore(outputTexture, pos, vec4(vel_y2, -vel_y2, 0, 1.0));
-    imageStore(outputTexture, pos, vec4(density2[idx], density2[idx], density2[idx], 1.0));
+    // imageStore(outputTexture, pos, vec4(density2[idx], density2[idx], density2[idx], 1.0));
+
+    int boundary_ind2 = get_grid_index_boundary(pos+ivec3(1), gridSize + 2);
+    imageStore(outputTexture, pos, vec4(b[boundary_ind2], b[boundary_ind2], b[boundary_ind2], 1.0));
 }

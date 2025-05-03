@@ -17,11 +17,15 @@ layout(binding = 3) buffer boundariesBuff { float b[]; };
 // layout(binding = 8) buffer density2Buff { float density2[]; };
 // layout(binding = 9) buffer pressure2Buff { float pressure2[]; };
 
-layout(push_constant) uniform Params {
+layout(push_constant) uniform PushConstants {
+    int gridSize;
     int shouldRed;
-};
+} pushConstants;
 
-const int gridSize = 129;
+int shouldRed = pushConstants.shouldRed;
+int gridSize = pushConstants.gridSize;
+
+// const int gridSize = 129;
 const float dt = 0.1;
 const int dim = 3;
 const float overRelaxation = 1.9;
